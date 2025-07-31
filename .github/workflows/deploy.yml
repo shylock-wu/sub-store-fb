@@ -1,0 +1,96 @@
+name: Sync Submodules and Deploy to Cloudflare
+
+on:
+  schedule:
+    - cron: "0 17 * * *" # 北京时间凌晨 1 点
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  sync-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update submodules to latest commits
+        run: |
+          git submodule foreach git pull origin main
+          git add .
+          git commit -m "chore: daily submodule sync $(date -u +"%Y-%m-%d")" || echo "No changes to commit"
+          git push
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Install backend dependencies
+        run: |
+          cd backend/backend
+          npm ci
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm run build
+
+      - name: Prepare Cloudflare deployment
+        run: |
+          # 创建部署目录
+          mkdir -p dist
+
+          # 复制前端构建文件
+          cp -r frontend/dist/* dist/
+
+          # 复制 Cloudflare Functions
+          cp -r functions dist/
+
+          # 复制后端核心文件到 functions
+          mkdir -p dist/functions/api
+          cp -r backend/backend/src/* dist/functions/api/
+
+          # 复制必要的配置文件
+          cp backend/backend/package.json dist/functions/api/
+          cp schema.sql dist/
+
+          # 创建 wrangler.toml 配置文件
+          cat > dist/wrangler.toml << 'EOF'
+          name = "sub-store"
+          compatibility_date = "2023-12-01"
+          compatibility_flags = ["nodejs_compat"]
+
+          [env.production]
+          name = "sub-store"
+
+          [[env.production.kv_namespaces]]
+          binding = "SUB_STORE_KV"
+          id = "${{ secrets.CLOUDFLARE_KV_NAMESPACE_ID }}"
+
+          [[env.production.d1_databases]]
+          binding = "SUB_STORE_DB"
+          database_name = "sub-store"
+          database_id = "${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}"
+
+          [env.production.vars]
+          NODE_ENV = "production"
+          SUB_STORE_FRONTEND_BACKEND_PATH = "/api"
+          SUB_STORE_DATA_BASE_PATH = "/data"
+          EOF
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=sub-store

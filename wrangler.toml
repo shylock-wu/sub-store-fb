@@ -1,0 +1,44 @@
+name = "sub-store"
+compatibility_date = "2023-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+# 生产环境配置
+[env.production]
+name = "sub-store"
+
+# KV 命名空间配置
+[[env.production.kv_namespaces]]
+binding = "SUB_STORE_KV"
+id = "your-kv-namespace-id"
+preview_id = "your-kv-preview-id"
+
+# D1 数据库配置
+[[env.production.d1_databases]]
+binding = "SUB_STORE_DB"
+database_name = "sub-store"
+database_id = "your-d1-database-id"
+
+# 环境变量
+[env.production.vars]
+NODE_ENV = "production"
+SUB_STORE_FRONTEND_BACKEND_PATH = "/api"
+SUB_STORE_DATA_BASE_PATH = "/data"
+
+# 开发环境配置
+[env.development]
+name = "sub-store-dev"
+
+[[env.development.kv_namespaces]]
+binding = "SUB_STORE_KV"
+id = "your-dev-kv-namespace-id"
+preview_id = "your-dev-kv-preview-id"
+
+[[env.development.d1_databases]]
+binding = "SUB_STORE_DB"
+database_name = "sub-store-dev"
+database_id = "your-dev-d1-database-id"
+
+[env.development.vars]
+NODE_ENV = "development"
+SUB_STORE_FRONTEND_BACKEND_PATH = "/api"
+SUB_STORE_DATA_BASE_PATH = "/data"
